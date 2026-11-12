@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Turntable · Minimal</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+  /* Backdrop fills the whole window; the stage (disc + bar + controls) is scaled to fit on top. */
+  #bg { position: fixed; inset: 0; background-size: cover; background-position: center bottom;
+        background-repeat: no-repeat; image-rendering: pixelated; }
+  #fit { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  #stage { position: relative; flex: none; width: 1440px; height: 900px; }
+
+  #disc { position: absolute; left: 464px; top: 136px; width: 512px; height: 512px; padding: 0; border: 0;
+          border-radius: 50%; background: transparent; cursor: pointer; }
+  #disc .face { width: 512px; height: 512px; background-size: 30720px 512px; background-repeat: no-repeat;
+                image-rendering: pixelated; animation: turn var(--spin, 3s) steps(60) infinite; }
+  @keyframes turn { from { background-position: 0 0; } to { background-position: -30720px 0; } }
+  .paused #disc .face { animation-play-state: paused; }
+
+  #progress { position: absolute; left: 468px; top: 688px; width: 504px; height: 40px;
+              display: flex; gap: 8px; align-items: flex-end; }
+  #progress i { display: block; width: 8px; }
+
+  #controls { position: absolute; left: 604px; top: 768px; display: flex; gap: 32px; }
+  #controls button { width: 56px; height: 56px; padding: 0; border: 0; background: transparent;
+                     color: inherit; cursor: pointer; transition: transform .15s steps(2); }
+  #controls button:hover { transform: translateY(-8px); }
+  button:focus-visible { outline: 4px solid currentColor; outline-offset: 4px; }
+  #controls svg { display: block; }
+  .ico-play { display: none !important; }
+  .paused .ico-play { display: block !important; }
+  .paused .ico-pause { display: none !important; }
+
+  @media (prefers-reduced-motion: reduce) { #disc .face { animation: none; } #controls button { transition: none; } }
+</style>
+</head>
+<body>
+<div id="bg" aria-hidden="true"></div>
+<div id="fit">
+  <main id="stage">
+    <button id="disc" aria-label="Pause"><div class="face" aria-hidden="true"></div></button>
+
+    <div id="progress" role="progressbar" aria-label="Track progress" aria-valuemin="0" aria-valuemax="100"></div>
+
+    <div id="controls">
+      <button id="prev" aria-label="Previous track">
+        <svg width="56" height="56" viewBox="0 0 7 7" shape-rendering="crispEdges" fill="currentColor" aria-hidden="true"><rect x="0" y="0" width="2" height="7"/><rect x="6" y="0" width="1" height="1"/><rect x="5" y="1" width="2" height="1"/><rect x="4" y="2" width="3" height="1"/><rect x="3" y="3" width="4" height="1"/><rect x="4" y="4" width="3" height="1"/><rect x="5" y="5" width="2" height="1"/><rect x="6" y="6" width="1" height="1"/></svg>
+      </button>
+      <button id="play" aria-label="Pause">
+        <svg class="ico-pause" width="56" height="56" viewBox="0 0 7 7" shape-rendering="crispEdges" fill="currentColor" aria-hidden="true"><rect x="1" y="0" width="2" height="7"/><rect x="4" y="0" width="2" height="7"/></svg>
+        <svg class="ico-play" width="56" height="56" viewBox="0 0 7 7" shape-rendering="crispEdges" fill="currentColor" aria-hidden="true"><rect x="2" y="0" width="1" height="1"/><rect x="2" y="1" width="2" height="1"/><rect x="2" y="2" width="3" height="1"/><rect x="2" y="3" width="4" height="1"/><rect x="2" y="4" width="3" height="1"/><rect x="2" y="5" width="2" height="1"/><rect x="2" y="6" width="1" height="1"/></svg>
+      </button>
+      <button id="next" aria-label="Next track">
+        <svg width="56" height="56" viewBox="0 0 7 7" shape-rendering="crispEdges" fill="currentColor" aria-hidden="true"><rect x="0" y="0" width="1" height="1"/><rect x="0" y="1" width="2" height="1"/><rect x="0" y="2" width="3" height="1"/><rect x="0" y="3" width="4" height="1"/><rect x="0" y="4" width="3" height="1"/><rect x="0" y="5" width="2" height="1"/><rect x="0" y="6" width="1" height="1"/><rect x="5" y="0" width="2" height="7"/></svg>
+      </button>
+    </div>
+  </main>
+</div>
+
+<script src="assets/manifest.js"></script>
+<script>
+// Keys: Space = play/pause, Left/Right = previous/next, B = try the next backdrop scene.
+(function () {
+  const M = window.TURNTABLE;
+  const $ = (id) => document.getElementById(id);
+  const stage = $('stage'), bg = $('bg'), disc = $('disc'), face = disc.firstElementChild;
+  const bar = $('progress'), controls = $('controls');
+  const HEIGHTS = [16,32,24,40,16,24,32,8,24,40,32,16,24,32,40,24,8,16,32,24,40,16,24,32,16,40,24,8,32,24,16,24];
+  const ticks = HEIGHTS.map((h) => { const i = document.createElement('i'); i.style.height = h + 'px'; bar.appendChild(i); return i; });
+  const S = { idx: 0, playing: true, pos: 107, override: {} };
+
+  document.documentElement.style.setProperty('--spin', M.spinSeconds + 's');
+
+  const album = () => M.albums[S.idx];
+  const sceneOf = (a) => S.override[a.key] || a.scene;
+
+  function render() {
+    const a = album(), b = a.backdrops[sceneOf(a)];
+    const shadow = b.shadow + '59';
+    bg.style.backgroundImage = `url(${b.file})`;
+    bg.style.backgroundColor = b.sky;
+    face.style.backgroundImage = `url(${a.discClear})`;
+    disc.style.filter = `drop-shadow(16px 16px 0 ${shadow})`;
+    controls.style.color = b.on;
+    controls.querySelectorAll('button').forEach((el) => { el.style.filter = `drop-shadow(8px 8px 0 ${shadow})`; });
+    const done = Math.floor(ticks.length * S.pos / a.length);
+    ticks.forEach((t, i) => { t.style.background = i < done ? b.on : b.off; });
+    bar.setAttribute('aria-valuenow', Math.round(100 * S.pos / a.length));
+    stage.classList.toggle('paused', !S.playing);
+    const label = S.playing ? 'Pause' : 'Play';
+    disc.setAttribute('aria-label', label);
+    $('play').setAttribute('aria-label', label);
+  }
+
+  const toggle = () => { S.playing = !S.playing; render(); };
+  const go = (d) => { S.idx = (S.idx + d + M.albums.length) % M.albums.length; S.pos = 0; render(); };
+  const cycleScene = () => {
+    const a = album(), i = M.scenes.indexOf(sceneOf(a));
+    S.override[a.key] = M.scenes[(i + 1) % M.scenes.length];
+    render();
+  };
+
+  disc.addEventListener('click', toggle);
+  $('play').addEventListener('click', toggle);
+  $('prev').addEventListener('click', () => go(-1));
+  $('next').addEventListener('click', () => go(1));
+  document.addEventListener('keydown', (e) => {
+    if (e.target.closest('button') && (e.key === ' ' || e.key === 'Enter')) return;  // let the button handle it
+    if (e.key === ' ') { e.preventDefault(); toggle(); }
+    else if (e.key === 'ArrowRight') go(1);
+    else if (e.key === 'ArrowLeft') go(-1);
+    else if (e.key === 'b' || e.key === 'B') cycleScene();
+  });
+
+  setInterval(() => {
+    if (!S.playing) return;
+    S.pos += 1;
+    if (S.pos >= album().length) go(1); else render();
+  }, 1000);
+
+  function fit() {
+    const s = Math.min(innerWidth / 1440, innerHeight / 900);
+    stage.style.transform = `scale(${s})`;
+  }
+  addEventListener('resize', fit);
+  fit();
+  render();
+})();
+</script>
+</body>
+</html>

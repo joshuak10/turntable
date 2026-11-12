@@ -1,0 +1,4 @@
+Turntable — extra feature ideas
+===============================
+
+* As the song progresses, an avatar (such as plants) grows taller.
